@@ -1,0 +1,16 @@
+404919c8f95373cdec22fe6bafc12ce2 *DESCRIPTION
+c1ae5a9de6a790b00a549a5efeaba5b8 *NAMESPACE
+64059cd3a2ee64c2d7018243e5b6fee6 *NEWS.md
+85760f6c51f76058f0f97f4bb9723cac *R/nlmixr2scm-package.R
+6d8ddcdf3f91afba22bea3d52d77674d *R/parsingutil.R
+d2b2e1ab66647e3a6ca39a0cbec8d83c *R/scm.R
+5b68be5d87d893c9316f78138badd110 *README.md
+b244730306790e4a474b56aedc2f4e8b *build/vignette.rds
+55e2fff7460a5b2bc815c311fb5859fb *inst/doc/runSCM.Rmd
+e2762b76373088e103f27220a0e6a0c8 *inst/doc/runSCM.html
+446ad9129e2c7afe97c9160bcbbfd66e *man/nlmixr2scm-package.Rd
+cdc040ff5b9c162bce85c126c13d5e82 *man/runSCM.Rd
+966f7c7f93c2a93329ac96ec49d7c70e *tests/testthat.R
+ca30ccaaab5270a17220597965d403df *tests/testthat/test-parsing.R
+8fd724b4b123b8b313a60f0db4c2643e *tests/testthat/test-scm.R
+55e2fff7460a5b2bc815c311fb5859fb *vignettes/runSCM.Rmd

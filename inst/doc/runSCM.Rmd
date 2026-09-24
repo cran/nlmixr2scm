@@ -1,0 +1,620 @@
+---
+title: "Stepwise Covariate Modelling with runSCM()"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Stepwise Covariate Modelling with runSCM()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+## Introduction
+
+Stepwise Covariate Modelling (SCM) is the standard automated covariate selection
+procedure in population PK/PD analysis.  It uses a likelihood-ratio test to evaluate
+whether adding a covariate-parameter relationship significantly improves model fit,
+and proceeds in two phases:
+
+1. **Forward inclusion**: starting from the base model, the candidate relationship
+   that produces the largest statistically significant ΔOFV (OFV decrease) is added
+   at each step.  The process repeats until no remaining candidate meets the threshold.
+2. **Backward elimination**: starting from the forward-final model, each included
+   relationship is tested for removal.  A relationship is dropped if its removal
+   does not produce a statistically significant ΔOFV increase (at a stricter
+   threshold than forward).
+
+`runSCM()` implements both phases for `nlmixr2` fits.  It automatically generates
+the covariate expressions in the model body — centering continuous covariates at their
+observed median, creating indicator columns for categorical covariates — so no data
+pre-processing is required.
+
+---
+
+## Example: warfarin PK covariate search
+
+We use `nlmixr2data::warfarin`, filtered to PK observations only (`dvid == "cp"`), with
+covariates body weight (`wt`, continuous) and sex (`sex`, categorical).
+
+
+``` r
+library(nlmixr2data)
+library(nlmixr2utils)
+library(nlmixr2scm)
+```
+
+### 1. Prepare the data
+
+Pass the **original, untransformed** dataset to `runSCM()`.  All covariate centering
+and other shape transformations are generated inside the model body by the SCM
+machinery; applying them to the data first would lead to double-transformation.
+
+
+``` r
+pkdata <- warfarin[warfarin$dvid == "cp", ]
+
+d_subj <- pkdata[!duplicated(pkdata$id), ]
+cat(sprintf("Subjects: %d   Rows: %d\n", length(unique(pkdata$id)), nrow(pkdata)))
+#> Subjects: 32   Rows: 283
+cat(sprintf(
+  "wt  median: %.1f  range: %.1f – %.1f\n",
+  median(d_subj$wt), min(d_subj$wt), max(d_subj$wt)
+))
+#> wt  median: 71.7  range: 40.0 – 102.0
+cat(sprintf(
+  "sex levels: %s\n",
+  paste(names(table(d_subj$sex)), table(d_subj$sex), sep = "=", collapse = ", ")
+))
+#> sex levels: female=5, male=27
+```
+
+### 2. Fit the base model
+
+The base model contains no covariate terms — `runSCM()` adds them.
+
+
+``` r
+warf_pk <- function() {
+  ini({
+    tka <- log(1.15) # log absorption rate constant (h^-1)
+    tcl <- log(0.135) # log clearance (L/h)
+    tv <- log(7.0) # log volume of distribution (L)
+    eta.ka ~ 0.40
+    eta.cl ~ 0.25
+    eta.v ~ 0.10
+    prop.err <- 0.10
+  })
+  model({
+    ka <- exp(tka + eta.ka)
+    cl <- exp(tcl + eta.cl)
+    v <- exp(tv + eta.v)
+    linCmt() ~ prop(prop.err)
+  })
+}
+
+fit_base <- nlmixr2(
+  warf_pk, pkdata,
+  est = "focei",
+  control = nlmixr2est::foceiControl(print = 0),
+  table = nlmixr2est::tableControl(cwres = TRUE)
+)
+```
+
+
+``` r
+fit_base$parFixedDf
+#>            Estimate         SE      %RSE Back-transformed  CI Lower  CI Upper
+#> tka      -0.5030012 0.22428497 44.589349        0.6047131 0.3896168 0.9385579
+#> tcl      -1.9965781 0.05638322  2.823993        0.1357992 0.1215916 0.1516668
+#> tv        2.0990027 0.04168834  1.986102        8.1580297 7.5179616 8.8525922
+#> prop.err  0.2254709 0.03131010 13.886538        0.2254709 0.1641042 0.2868376
+#>          BSV(CV%) Shrink(SD)%
+#> tka      72.79115   49.671620
+#> tcl      26.84370    3.267123
+#> tv       19.41236   21.784693
+#> prop.err       NA          NA
+cat(sprintf("Base OFV: %.3f\n", fit_base$objf))
+#> Base OFV: 474.491
+```
+
+---
+
+### 3. Candidate specification strategies
+
+`runSCM()` supports two main ways to define the search space.
+
+The most explicit approach is `pairsVec`: a list of `list(var=, covar=, shapes=)`
+items.  Each item names the PK parameter (`var`), the covariate (`covar`), and
+optionally the functional shapes to test.  This is useful when you want exact
+control over which relationships are evaluated.
+
+When the search space is a full Cartesian product of parameters and covariates, a
+shorter option is `varsVec` plus `covarsVec`, with `catvarsVec` used for
+categorical covariates.  That is the approach used in the worked example below.
+
+The `data` argument must be supplied explicitly whenever the base model does not
+reference a covariate column — otherwise `nlme::getData(fit)` may drop it.
+
+#### `runSCM()` argument reference
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `varsVec` | `NULL` | PK parameters to test (used with `covarsVec`; ignored when `pairsVec` supplied) |
+| `covarsVec` | `NULL` | Continuous covariates (ignored when `pairsVec` supplied) |
+| `catvarsVec` | `NULL` | Categorical covariates; indicator columns created automatically |
+| `pairsVec` | `NULL` | Explicit parameter-covariate pairs; overrides `varsVec`/`covarsVec` |
+| `shapes` | `"power"` | Shape(s) for continuous covariates: `"power"`, `"lin"`, `"log"`, `"identity"` |
+| `customShapes` | `NULL` | Named list of additional shape builder functions |
+| `centers` | `NULL` | Named vector fixing the reference (centering) value for continuous covariates, e.g. `c(BW = 70)`, instead of the per-dataset median |
+| `pVal` | `list(fwd=0.05, bck=0.01)` | Forward and backward p-value thresholds |
+| `searchType` | `"scm"` | `"scm"` (both phases), `"forward"`, or `"backward"` |
+| `data` | `NULL` | Dataset; required when base model omits covariate columns |
+| `inits` | `list()` | Initial theta estimates for covariate parameters, by shape |
+| `missingToken` | `NA` | Sentinel value for missing covariate observations |
+| `catCutoff` | `0.05` | Minimum non-reference level prevalence to test |
+| `includedRelations` | `NULL` | Relations forced into the backward-start model |
+| `outputDir` | `NULL` | Subdirectory for saved model `.rds` files; auto-named when `NULL` |
+| `saveModels` | `TRUE` | Write fitted models to `outputDir` |
+| `verbose` | `FALSE` | Print full candidate tables at each step |
+| `control` | `NULL` | Control object (e.g. `saemControl()`) passed to every `nlmixr2()` call |
+| `print` | `100` | Optimiser progress-print interval, applied as `control$print` |
+| `restart` | `FALSE` | Discard existing cache and start fresh |
+| `workers` | `NULL` | Sequential; set > 1 for parallel candidate fitting |
+| `confirm` | `TRUE` | Prompt for confirmation in interactive sessions |
+| `profileInit` | `FALSE` | Warm-start every forward candidate's covariate coefficient with a frozen 1-D profile (Brent method) |
+| `profileInitOnStall` | `TRUE` | Warm-start only candidates whose ordinary fit stalls (OFV improvement `<= stallTol`) |
+| `stallTol` | `0` | OFV-improvement threshold below which a forward candidate is considered stalled |
+| `maxRetries` | `3L` | Maximum retry attempts per candidate when the OFV is deemed unrealistic |
+| `maxDeltaOFV` | `Inf` | Absolute ceiling on plausible `\|dOFV\|` before a candidate is retried |
+| `retryPerturbSD` | `0.5` | SD of the log-normal perturbation applied to `cov_init` on odd-numbered retries |
+| `retrySmallInit` | `0.01` | Near-zero covariate theta init used on even-numbered retries |
+| `retryOFVTolerance` | `NULL` | Margin by which candidate OFV must exceed the parent before retrying; auto-detected (`10` for SAEM, `0` otherwise) when `NULL` |
+| `retryFailOnExhaustion` | `FALSE` | Exclude a candidate as failed (instead of accepting the best retry) when all retries are exhausted |
+
+---
+
+### 4. Covariate shapes
+
+`runSCM()` supports four built-in shapes for continuous covariates. `"power"` and `"lin"` use the
+**observed median** as the centering value, computed automatically from the data.
+
+| Shape | Expression in model body | Interpretation |
+|---|---|---|
+| `"power"` | `log(cov / median(cov))` | Allometric / power-law relationship |
+| `"lin"` | `cov - median(cov)` | Linear deviation from the median |
+| `"log"` | `log(cov)` | Log-transformed covariate (no centering) |
+| `"identity"` | `cov` | Raw covariate (no transformation) |
+
+Categorical covariates always use the `"cat"` shape: a binary indicator column
+`cov_<level>` multiplied by a theta parameter.  The reference level is the most
+frequent category.  Levels representing fewer than `catCutoff` (default 5 %) of
+subjects are merged with the reference and not tested.
+
+Custom shapes can be added via the `customShapes` argument — a named list of functions
+`function(col, center, level)` that return a character expression string.
+
+By default `"power"` and `"lin"` center on the per-dataset median, which can differ
+between datasets fit with the same model. Pass `centers` (a named numeric vector, e.g.
+`centers = c(wt = 70)`) to fix the reference value for one or more continuous
+covariates instead, so covariate coefficients stay on a consistent reference across
+datasets. Covariates not named in `centers` continue to use the median.
+
+---
+
+### 5. Run the SCM
+
+When the search space is a full Cartesian product of parameters × covariates, use
+`varsVec` and `covarsVec` instead of enumerating every pair.
+
+The example below tests `wt~cl`, `wt~v`, `sex~cl`, and `sex~v`, with both power and
+linear shapes for the continuous covariate — six candidates in total.
+
+
+``` r
+scm <- runSCM(
+  fit        = fit_base,
+  data       = pkdata,
+  varsVec    = c("cl", "v"),
+  covarsVec  = "wt",
+  catvarsVec = "sex",
+  shapes     = c("power", "lin"),
+  pVal       = list(fwd = 0.05, bck = 0.01),
+  searchType = "scm",
+  saveModels = TRUE,
+  verbose    = FALSE,
+  restart    = TRUE,
+  print      = 0,
+  workers    = 1L,
+  rxThreads  = 2L,
+  confirm    = FALSE
+)
+#>                step    covar var shape     objf deltObjf      AIC      BIC
+#> cov_wt_power_v    1 wt_power   v power 447.8365 26.65464 925.1436 953.3473
+#>                numParams  qchisqr      pchisqr included searchType
+#> cov_wt_power_v         8 3.841459 2.432662e-07      yes    forward
+#>                      covNames covarEffect bsvReduction
+#> cov_wt_power_v cov_wt_power_v   0.8593107     86.25735
+#>                 step    covar var shape     objf deltObjf      AIC     BIC
+#> cov_wt_power_cl    2 wt_power  cl power 442.4678 5.368724 921.7749 953.504
+#>                 numParams  qchisqr    pchisqr included searchType
+#> cov_wt_power_cl         9 3.841459 0.02050097      yes    forward
+#>                        covNames covarEffect bsvReduction
+#> cov_wt_power_cl cov_wt_power_cl   0.5768601     16.30541
+#>                 step    covar var shape     objf deltObjf      AIC      BIC
+#> cov_wt_power_cl    1 wt_power  cl power 447.7641 5.296325 925.0712 953.2749
+#>                 numParams  qchisqr    pchisqr included searchType
+#> cov_wt_power_cl         8 6.634897 0.02137047  dropped   backward
+#>                        covNames covarEffect bsvReduction
+#> cov_wt_power_cl cov_wt_power_cl   0.5768601     16.84933
+#> Direction  Step  Relation                Ref OFV         OFV      dOFV    p-value  Decision 
+#> ------------------------------------------------------------------------------------------- 
+#> Forward    1     wt_power~v [power]      421.182     447.837    26.655     0.0000  Added
+#> Forward    2     wt_power~cl [power]     437.099     442.468     5.369     0.0205  Added
+#> Forward    3     sex_female~v [cat]      437.484     439.976     2.492     0.1144  Not selected
+#> Backward   1     wt_power~cl [power]     442.468     447.764     5.296     0.0214  Removed
+#> Backward   2     wt_power~v [power]      447.764     474.490    26.726     0.0000  Retained
+#> Direction  Step  Relation                Ref OFV         OFV      dOFV    p-value  Decision 
+#> ------------------------------------------------------------------------------------------- 
+#> Forward    1     wt_power~v [power]      421.182     447.837    26.655     0.0000  Added
+#> Forward    1     wt_lin~v [lin]          424.170     449.330    25.161     0.0000  Not selected
+#> Forward    1     sex_female~v [cat]      433.696     454.094    20.397     0.0000  Not selected
+#> Forward    1     wt_power~cl [power]     465.843     470.167     4.324     0.0376  Not selected
+#> Forward    1     wt_lin~cl [lin]         466.915     470.703     3.788     0.0516  Not selected
+#> Forward    1     sex_female~cl [cat]     473.468     473.980     0.512     0.4744  Not selected
+#> 
+#> Forward    2     wt_power~cl [power]     437.099     442.468     5.369     0.0205  Added
+#> Forward    2     wt_lin~cl [lin]         438.113     442.975     4.862     0.0275  Not selected
+#> Forward    2     sex_female~v [cat]      442.539     445.188     2.649     0.1036  Not selected
+#> Forward    2     sex_female~cl [cat]     446.624     447.230     0.606     0.4362  Not selected
+#> 
+#> Forward    3     sex_female~v [cat]      437.484     439.976     2.492     0.1144  Not selected
+#> Forward    3     sex_female~cl [cat]     439.450     440.959     1.509     0.2193  Not selected
+#> 
+#> Backward   1     wt_power~v [power]      442.468     470.167    27.699     0.0000  Retained
+#> Backward   1     wt_power~cl [power]     442.468     447.764     5.296     0.0214  Removed
+#> 
+#> Backward   2     wt_power~v [power]      447.764     474.490    26.726     0.0000  Retained
+```
+
+---
+
+### 6. Interpreting the results
+
+`runSCM()` returns a named list with three elements:
+
+
+``` r
+names(scm)
+#> [1] "summaryTable" "resFwd"       "resBck"
+```
+
+#### Summary table
+
+`summaryTable` contains one row per candidate tested across all steps and both phases,
+with the columns most useful for review:
+
+
+``` r
+cols <- intersect(
+  c(
+    "searchType", "step", "covar", "var", "shape",
+    "deltObjf", "pchisqr", "included"
+  ),
+  colnames(scm$summaryTable)
+)
+print(scm$summaryTable[, cols])
+#>                    searchType step      covar var shape   deltObjf      pchisqr
+#> cov_wt_power_cl       forward    1   wt_power  cl power  4.3240231 3.757798e-02
+#> cov_wt_lin_cl         forward    1     wt_lin  cl   lin  3.7880142 5.162086e-02
+#> cov_wt_power_v        forward    1   wt_power   v power 26.6546376 2.432662e-07
+#> cov_wt_lin_v          forward    1     wt_lin   v   lin 25.1607684 5.274431e-07
+#> cov_sex_female_cl     forward    1 sex_female  cl   cat  0.5116035 4.744456e-01
+#> cov_sex_female_v      forward    1 sex_female   v   cat 20.3973712 6.291616e-06
+#> cov_wt_power_cl1      forward    2   wt_power  cl power  5.3687243 2.050097e-02
+#> cov_wt_lin_cl1        forward    2     wt_lin  cl   lin  4.8618158 2.745742e-02
+#> cov_sex_female_cl1    forward    2 sex_female  cl   cat  0.6063690 4.361582e-01
+#> cov_sex_female_v1     forward    2 sex_female   v   cat  2.6485710 1.036430e-01
+#> cov_sex_female_cl2    forward    3 sex_female  cl   cat  1.5088424 2.193158e-01
+#> cov_sex_female_v2     forward    3 sex_female   v   cat  2.4917573 1.144439e-01
+#> cov_wt_power_cl2     backward    1   wt_power  cl power  5.2963247 2.137047e-02
+#> cov_wt_power_v2      backward    1   wt_power   v power 27.6993854 1.417077e-07
+#> cov_wt_power_v1      backward    2   wt_power   v power 26.7262383 2.344167e-07
+#>                    included
+#> cov_wt_power_cl          no
+#> cov_wt_lin_cl            no
+#> cov_wt_power_v          yes
+#> cov_wt_lin_v             no
+#> cov_sex_female_cl        no
+#> cov_sex_female_v         no
+#> cov_wt_power_cl1        yes
+#> cov_wt_lin_cl1           no
+#> cov_sex_female_cl1       no
+#> cov_sex_female_v1        no
+#> cov_sex_female_cl2       no
+#> cov_sex_female_v2        no
+#> cov_wt_power_cl2    dropped
+#> cov_wt_power_v2    retained
+#> cov_wt_power_v1    retained
+```
+
+Key columns:
+
+| Column | Meaning |
+|---|---|
+| `searchType` | `"forward"` or `"backward"` |
+| `step` | Step number within the phase |
+| `covar` | Covariate name |
+| `var` | PK parameter |
+| `shape` | Functional shape tested |
+| `deltObjf` | ΔOFV (candidate − reference: negative = improvement in forward, positive = deterioration in backward) |
+| `pchisqr` | p-value from chi-squared test (1 df) |
+| `bsvReduction` | Reduction in BSV for `var` (%) |
+| `covarEffect` | Estimated effect magnitude at the covariate extremes |
+| `included` | `"yes"` (added in forward), `"no"` (rejected in forward), `"dropped"` (removed in backward), `"retained"` (tested in backward but kept in model) |
+
+#### Forward search detail
+
+
+``` r
+fwd_tbl <- scm$resFwd[[2]]
+if (!is.null(fwd_tbl) && nrow(fwd_tbl) > 0) {
+  print(fwd_tbl[
+    fwd_tbl$included == "yes",
+    intersect(c(
+      "step", "covar", "var", "shape", "deltObjf",
+      "pchisqr", "bsvReduction"
+    ), colnames(fwd_tbl))
+  ])
+} else {
+  cat("No covariates accepted in forward search.\n")
+}
+```
+
+
+``` r
+fwd_tbl
+#>                    step      covar var shape     objf   deltObjf      AIC
+#> cov_wt_power_cl       1   wt_power  cl power 470.1671  4.3240231 947.4743
+#> cov_wt_lin_cl         1     wt_lin  cl   lin 470.7031  3.7880142 948.0103
+#> cov_wt_power_v        1   wt_power   v power 447.8365 26.6546376 925.1436
+#> cov_wt_lin_v          1     wt_lin   v   lin 449.3304 25.1607684 926.6375
+#> cov_sex_female_cl     1 sex_female  cl   cat 473.9795  0.5116035 951.2867
+#> cov_sex_female_v      1 sex_female   v   cat 454.0938 20.3973712 931.4009
+#> cov_wt_power_cl1      2   wt_power  cl power 442.4678  5.3687243 921.7749
+#> cov_wt_lin_cl1        2     wt_lin  cl   lin 442.9747  4.8618158 922.2818
+#> cov_sex_female_cl1    2 sex_female  cl   cat 447.2301  0.6063690 926.5373
+#> cov_sex_female_v1     2 sex_female   v   cat 445.1879  2.6485710 924.4951
+#> cov_sex_female_cl2    3 sex_female  cl   cat 440.9589  1.5088424 922.2661
+#> cov_sex_female_v2     3 sex_female   v   cat 439.9760  2.4917573 921.2832
+#>                         BIC numParams  qchisqr      pchisqr included searchType
+#> cov_wt_power_cl    975.6779         8 3.841459 3.757798e-02       no    forward
+#> cov_wt_lin_cl      976.2139         8 3.841459 5.162086e-02       no    forward
+#> cov_wt_power_v     953.3473         8 3.841459 2.432662e-07      yes    forward
+#> cov_wt_lin_v       954.8411         8 3.841459 5.274431e-07       no    forward
+#> cov_sex_female_cl  979.4903         8 3.841459 4.744456e-01       no    forward
+#> cov_sex_female_v   959.6045         8 3.841459 6.291616e-06       no    forward
+#> cov_wt_power_cl1   953.5040         9 3.841459 2.050097e-02      yes    forward
+#> cov_wt_lin_cl1     954.0109         9 3.841459 2.745742e-02       no    forward
+#> cov_sex_female_cl1 958.2664         9 3.841459 4.361582e-01       no    forward
+#> cov_sex_female_v1  956.2242         9 3.841459 1.036430e-01       no    forward
+#> cov_sex_female_cl2 957.5206        10 3.841459 2.193158e-01       no    forward
+#> cov_sex_female_v2  956.5377        10 3.841459 1.144439e-01       no    forward
+#>                             covNames  covarEffect bsvReduction
+#> cov_wt_power_cl      cov_wt_power_cl  0.525854679    13.300446
+#> cov_wt_lin_cl          cov_wt_lin_cl  0.007405226    11.671437
+#> cov_wt_power_v        cov_wt_power_v  0.859310689    86.257349
+#> cov_wt_lin_v            cov_wt_lin_v  0.013266915    84.325872
+#> cov_sex_female_cl  cov_sex_female_cl -0.095430676     1.138791
+#> cov_sex_female_v    cov_sex_female_v -0.392221612    82.957720
+#> cov_wt_power_cl1     cov_wt_power_cl  0.576860120    16.305410
+#> cov_wt_lin_cl1         cov_wt_lin_cl  0.008266872    14.835484
+#> cov_sex_female_cl1 cov_sex_female_cl -0.099122283     1.212893
+#> cov_sex_female_v1   cov_sex_female_v -0.159197716    61.937571
+#> cov_sex_female_cl2 cov_sex_female_cl  0.210572065     5.863930
+#> cov_sex_female_v2   cov_sex_female_v -0.161627330    46.007515
+```
+
+#### Backward search detail
+
+
+``` r
+bck_tbl <- scm$resBck[[2]]
+if (!is.null(bck_tbl) && nrow(bck_tbl) > 0) {
+  print(bck_tbl[, intersect(c(
+    "step", "covar", "var", "shape", "deltObjf",
+    "pchisqr", "included"
+  ), colnames(bck_tbl))])
+} else {
+  cat("No backward elimination steps.\n")
+}
+```
+
+
+``` r
+bck_tbl
+#>                 step    covar var shape     objf  deltObjf      AIC      BIC
+#> cov_wt_power_cl    1 wt_power  cl power 447.7641  5.296325 925.0712 953.2749
+#> cov_wt_power_v     1 wt_power   v power 470.1672 27.699385 947.4743 975.6779
+#> cov_wt_power_v1    2 wt_power   v power 474.4903 26.726238 949.7975 974.4757
+#>                 numParams  qchisqr      pchisqr included searchType
+#> cov_wt_power_cl         8 6.634897 2.137047e-02  dropped   backward
+#> cov_wt_power_v          8 6.634897 1.417077e-07 retained   backward
+#> cov_wt_power_v1         7 6.634897 2.344167e-07 retained   backward
+#>                        covNames covarEffect bsvReduction
+#> cov_wt_power_cl cov_wt_power_cl   0.5768601     16.84933
+#> cov_wt_power_v   cov_wt_power_v   0.8793381     88.72094
+#> cov_wt_power_v1  cov_wt_power_v   0.8509072     89.61420
+```
+
+#### Final model
+
+The final model fit is in `resBck[[1]]` after a full SCM (or `resFwd[[1]]` after a
+forward-only search):
+
+
+``` r
+fit_final <- scm$resBck[[1]]
+fit_final$parFixedDf
+#>                  Estimate         SE      %RSE Back-transformed  CI Lower
+#> tka            -0.4692397 0.21878337 46.625076        0.6254776 0.4073644
+#> tcl            -2.0005224 0.05491388  2.744977        0.1352646 0.1214623
+#> tv              2.1200409 0.03061905  1.444267        8.3314780 7.8461945
+#> prop.err        0.2251575 0.02924468 12.988546        0.2251575 0.1678389
+#> cov_wt_power_v  0.8509072 0.12399075 14.571595        0.8509072 0.6078898
+#>                 CI Upper BSV(CV%) Shrink(SD)%
+#> tka            0.9603743 70.21920   49.267810
+#> tcl            0.1506354 26.98989    2.819955
+#> tv             8.8467760  6.17619   59.971497
+#> prop.err       0.2824760       NA          NA
+#> cov_wt_power_v 1.0939247       NA          NA
+cat(sprintf(
+  "Final OFV: %.3f   ΔOFV vs base: %.3f\n",
+  fit_final$objf, fit_base$objf - fit_final$objf
+))
+#> Final OFV: 447.764   ΔOFV vs base: 26.727
+```
+
+---
+
+### 7. Forced inclusions
+
+`includedRelations` forces specific covariate relationships into the model at the start
+of backward elimination — even if they were not accepted during forward inclusion.
+This mirrors PsN's `[included_relations]` block:
+
+The `wt~cl` power relationship will be present at the start of backward elimination
+regardless of whether it was significant in the forward phase.  It remains eligible
+for removal during backward elimination like any other covariate.
+
+---
+
+### 8. Forward-only or backward-only search
+
+Set `searchType` to run a single phase:
+
+With `searchType = "forward"`, the run stops after the inclusion phase and the
+forward-final model is returned in `resFwd[[1]]`.  With `searchType = "backward"`,
+`runSCM()` applies elimination to a model that already contains covariate terms.
+
+---
+
+### 9. Parallel candidate fitting
+
+Each candidate model at a given step is an independent fit, so parallelisation gives
+a near-linear speed-up up to the number of candidates.  Install the optional
+`future`, `future.apply`, and `progressr` packages and set `workers` to the desired
+number of parallel processes.
+
+Sequential execution (`workers = NULL` or `workers = 1`) requires no additional
+packages.
+
+> **Note**: parallel SCM workers load from the **installed** package.  If you are
+> developing with `devtools::load_all()`, install the package first with
+> `devtools::install()` before using `workers > 1`.
+
+---
+
+### 10. Missing covariate values
+
+When a covariate has missing observations, set `missingToken` to the sentinel used in
+the data (e.g. `-99` or `"."`) in addition to `NA`.  `runSCM()` wraps the covariate
+expression in an `ifelse()` guard that imputes the population-typical value:
+
+* **Continuous**: imputes the median by evaluating the shape expression at
+  `cov = median(cov)`.  This gives `0` for `"power"` (`log(median(cov)/median(cov)) = 0`) and
+  `"lin"` (`median(cov)-median(cov)= 0`), `log(median(cov))` for `"log"`, and the `median(cov)` itself
+  for `"identity"`. 
+* **Categorical**: imputes the mode (most frequent level).
+
+---
+
+## Output files
+
+When `saveModels = TRUE` (the default), `runSCM()` writes the following files to the
+output directory (auto-named `<fitName>_scm_<N>` in the working directory).
+
+Two CSV summaries and one log file are written at the end of the search:
+
+| File | Contents |
+|---|---|
+| `scm_step_summary.csv` | Best candidate per step (one row per step) |
+| `scm_all_candidates.csv` | Every candidate model tested, across all steps and both phases |
+| `scm_log.txt` | Human-readable run log with header metadata |
+
+Three `.rds` files are written **per accepted step** (not per candidate). The
+`<key>` segment is `<covar>_<var>` for the covariate that was added (forward)
+or removed (backward) at that step:
+
+| File | Contents |
+|---|---|
+| `forward_step_<N>_fit_<key>.rds` | Fit object for the model accepted at forward step N |
+| `forward_step_<N>_table_<key>.rds` | One-row data frame for the accepted best candidate |
+| `forward_step_<N>_completetable_<key>.rds` | All candidates tested across forward steps 1..N (cumulative) |
+| `backward_step_<N>_fit_<key>.rds` | Fit object after the covariate is removed at backward step N |
+| `backward_step_<N>_table_<key>.rds` | One-row data frame for the removed covariate |
+| `backward_step_<N>_completetable_<key>.rds` | All candidates tested across backward steps 1..N (cumulative) |
+
+Only the accepted (best-at-step) candidate is persisted to `.rds`; per-candidate
+fit results are not written individually but are available in
+`scm_all_candidates.csv` and in the cumulative `_completetable_` snapshots.
+
+> The `_table_` and `_completetable_` `.rds` files duplicate information in the
+> CSVs but at full numeric precision and as per-step checkpoints (useful for
+> resume/inspection mid-run). Routine post-hoc analysis can rely on the CSVs alone.
+
+Set `saveModels = FALSE` to run without writing any files, for example when
+exploring the search space in a scratch session.
+
+---
+
+## Tips for a robust SCM
+
+**Sample size**: the SCM uses a chi-squared approximation with 1 degree of freedom.
+The rule of thumb is at least 50–100 subjects for a reliable test; sparse data leads
+to inflated type I error in forward inclusion.
+
+**p-value thresholds**: the conventional PsN defaults are `fwd = 0.05` and
+`bck = 0.01`.  In exploratory analyses, a more liberal forward threshold (e.g. 0.10)
+avoids missing important relationships at the cost of higher false-positive rates.
+
+**Shape choice**: the power shape (`log(cov/median)`) is appropriate for weight and
+other allometric predictors.  Use `shapes = c("power", "lin")` to test both and let
+the data decide.
+
+**Warm-starting**: when a covariate is accepted, the estimated theta from that step
+is automatically used as the starting estimate for all subsequent steps that involve
+the same covariate shape, which speeds convergence and improves numerical stability.
+
+**Stalled candidates**: with ODE models, solver noise can flatten the outer objective
+enough that a candidate's fit never leaves its zero-effect initial estimate. By
+default (`profileInitOnStall = TRUE`), a candidate whose OFV improvement over its
+parent is `<= stallTol` is automatically rescued with a one-shot frozen 1-D profile
+(Brent method) that supplies a gradient-informative starting value, then refit. Set
+`profileInit = TRUE` to warm-start every forward candidate this way rather than only
+stalled ones.
+
+**Unrealistic OFVs**: `runSCM()` retries a candidate (up to `maxRetries`, default 3)
+when its fit produces an implausible OFV — using a perturbed or near-zero covariate
+init on alternate attempts — before falling back to the best attempt seen (or, with
+`retryFailOnExhaustion = TRUE`, excluding the candidate as failed). Stochastic
+estimators (SAEM) get a wider tolerance automatically to avoid spurious retries from
+Monte Carlo noise.
+
+**Categorical covariates**: pass `catvarsVec` rather than pre-creating dummy columns.
+`runSCM()` handles level detection, reference-level selection, and indicator column
+creation automatically.
+
+---
+
+## References
+
+Jonsson, E.N. & Karlsson, M.O. (1998). Automated covariate model building within
+NONMEM. *Pharmaceutical Research*, 15(9), 1463–1468.
+
+Lindbom, L., Ribbing, J., & Jonsson, E.N. (2004). Perl-speaks-NONMEM (PsN) — a Perl
+module for NONMEM related programming. *Computer Methods and Programs in Biomedicine*,
+75, 85–94.
+
+Ribbing, J. & Jonsson, E.N. (2004). Power, selection bias and predictive performance
+of the population pharmacokinetic covariate model. *Journal of Pharmacokinetics and
+Pharmacodynamics*, 31(2), 109–134.

@@ -1,0 +1,54 @@
+Package: nlmixr2scm
+Title: Stepwise Covariate Modeling for 'nlmixr2' Models
+Version: 0.4
+Authors@R: c(
+    person("Justin", "Wilkins", email = "justin.wilkins@occams.com", role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0002-7099-9396")),
+    person("Matthew", "Fidler", email = "matthew.fidler@gmail.com", role = "aut",
+           comment = c(ORCID = "0000-0001-8538-6691")),
+    person("Yaping", "Liu", email = "ypliu@umich.edu", role = "aut",
+           comment = c(ORCID = "0009-0009-2842-3797")),
+    person("Bill", "Denney", email = "wdenney@humanpredictions.com", role = "aut",
+           comment = c(ORCID = "0000-0002-5759-428X")),
+    person("Vipul", "Mann", email = "vm2583@columbia.edu", role = "aut"),
+    person("Vishal", "Sarsani", email = "vsarsani@umass.edu", role = "aut",
+           comment = c(ORCID = "0000-0002-9272-3438")),
+    person("Christian", "Bartels", email = "christian.bartels@novartis.com", role = "ctb")
+  )
+Description: Stepwise covariate modeling (SCM) for nonlinear mixed-effects
+    models fitted with 'nlmixr2'. Forward inclusion and backward elimination
+    are driven by likelihood-ratio tests, and the covariate terms are
+    generated inside the model body, so continuous covariates are centered
+    and categorical covariates expanded into indicator columns without
+    editing the model by hand. Candidate fits can be cached and resumed,
+    fitted in parallel, and reviewed through per-step and all-candidate
+    summary tables. The approach follows Jonsson and Karlsson (1998)
+    <doi:10.1023/A:1011970125687>, and the implementation in
+    'Perl-speaks-NONMEM' described by Lindbom, Ribbing and Jonsson (2004)
+    <doi:10.1016/j.cmpb.2003.11.003>.
+Depends: R (>= 4.1)
+License: GPL (>= 3)
+URL: https://github.com/nlmixr2/nlmixr2scm
+BugReports: https://github.com/nlmixr2/nlmixr2scm/issues
+Imports: checkmate, cli (>= 3.4.0), data.table, lotri, nlme, nlmixr2est
+        (>= 7.0.0), nlmixr2utils (>= 0.3), rxode2 (>= 5.0.0), stats,
+        tools, utils
+Suggests: future, knitr, nlmixr2data, pkgload, rmarkdown, testthat (>=
+        3.0.0), withr
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Encoding: UTF-8
+Config/roxygen2/version: 8.1.0
+NeedsCompilation: no
+Packaged: 2026-09-14 09:38:51 UTC; justin
+Author: Justin Wilkins [aut, cre, cph] (ORCID:
+    <https://orcid.org/0000-0002-7099-9396>),
+  Matthew Fidler [aut] (ORCID: <https://orcid.org/0000-0001-8538-6691>),
+  Yaping Liu [aut] (ORCID: <https://orcid.org/0009-0009-2842-3797>),
+  Bill Denney [aut] (ORCID: <https://orcid.org/0000-0002-5759-428X>),
+  Vipul Mann [aut],
+  Vishal Sarsani [aut] (ORCID: <https://orcid.org/0000-0002-9272-3438>),
+  Christian Bartels [ctb]
+Maintainer: Justin Wilkins <justin.wilkins@occams.com>
+Repository: CRAN
+Date/Publication: 2026-09-24 13:30:14 UTC

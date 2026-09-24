@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Stepwise Covariate Modelling with runSCM()</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Stepwise Covariate Modelling with
+runSCM()</h1>
+
+
+
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>Stepwise Covariate Modelling (SCM) is the standard automated
+covariate selection procedure in population PK/PD analysis. It uses a
+likelihood-ratio test to evaluate whether adding a covariate-parameter
+relationship significantly improves model fit, and proceeds in two
+phases:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Forward inclusion</strong>: starting from the base model,
+the candidate relationship that produces the largest statistically
+significant ΔOFV (OFV decrease) is added at each step. The process
+repeats until no remaining candidate meets the threshold.</li>
+<li><strong>Backward elimination</strong>: starting from the
+forward-final model, each included relationship is tested for removal. A
+relationship is dropped if its removal does not produce a statistically
+significant ΔOFV increase (at a stricter threshold than forward).</li>
+</ol>
+<p><code>runSCM()</code> implements both phases for <code>nlmixr2</code>
+fits. It automatically generates the covariate expressions in the model
+body — centering continuous covariates at their observed median,
+creating indicator columns for categorical covariates — so no data
+pre-processing is required.</p>
+<hr />
+</div>
+<div id="example-warfarin-pk-covariate-search" class="section level2">
+<h2>Example: warfarin PK covariate search</h2>
+<p>We use <code>nlmixr2data::warfarin</code>, filtered to PK
+observations only (<code>dvid == &quot;cp&quot;</code>), with covariates body
+weight (<code>wt</code>, continuous) and sex (<code>sex</code>,
+categorical).</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(nlmixr2data)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(nlmixr2utils)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">library</span>(nlmixr2scm)</span></code></pre></div>
+<div id="prepare-the-data" class="section level3">
+<h3>1. Prepare the data</h3>
+<p>Pass the <strong>original, untransformed</strong> dataset to
+<code>runSCM()</code>. All covariate centering and other shape
+transformations are generated inside the model body by the SCM
+machinery; applying them to the data first would lead to
+double-transformation.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>pkdata <span class="ot">&lt;-</span> warfarin[warfarin<span class="sc">$</span>dvid <span class="sc">==</span> <span class="st">&quot;cp&quot;</span>, ]</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>d_subj <span class="ot">&lt;-</span> pkdata[<span class="sc">!</span><span class="fu">duplicated</span>(pkdata<span class="sc">$</span>id), ]</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">&quot;Subjects: %d   Rows: %d</span><span class="sc">\n</span><span class="st">&quot;</span>, <span class="fu">length</span>(<span class="fu">unique</span>(pkdata<span class="sc">$</span>id)), <span class="fu">nrow</span>(pkdata)))</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; Subjects: 32   Rows: 283</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>  <span class="st">&quot;wt  median: %.1f  range: %.1f – %.1f</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>  <span class="fu">median</span>(d_subj<span class="sc">$</span>wt), <span class="fu">min</span>(d_subj<span class="sc">$</span>wt), <span class="fu">max</span>(d_subj<span class="sc">$</span>wt)</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>))</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; wt  median: 71.7  range: 40.0 – 102.0</span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  <span class="st">&quot;sex levels: %s</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">names</span>(<span class="fu">table</span>(d_subj<span class="sc">$</span>sex)), <span class="fu">table</span>(d_subj<span class="sc">$</span>sex), <span class="at">sep =</span> <span class="st">&quot;=&quot;</span>, <span class="at">collapse =</span> <span class="st">&quot;, &quot;</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>))</span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; sex levels: female=5, male=27</span></span></code></pre></div>
+</div>
+<div id="fit-the-base-model" class="section level3">
+<h3>2. Fit the base model</h3>
+<p>The base model contains no covariate terms — <code>runSCM()</code>
+adds them.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>warf_pk <span class="ot">&lt;-</span> <span class="cf">function</span>() {</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="fu">ini</span>({</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>    tka <span class="ot">&lt;-</span> <span class="fu">log</span>(<span class="fl">1.15</span>) <span class="co"># log absorption rate constant (h^-1)</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>    tcl <span class="ot">&lt;-</span> <span class="fu">log</span>(<span class="fl">0.135</span>) <span class="co"># log clearance (L/h)</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>    tv <span class="ot">&lt;-</span> <span class="fu">log</span>(<span class="fl">7.0</span>) <span class="co"># log volume of distribution (L)</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>    eta.ka <span class="sc">~</span> <span class="fl">0.40</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>    eta.cl <span class="sc">~</span> <span class="fl">0.25</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>    eta.v <span class="sc">~</span> <span class="fl">0.10</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>    prop.err <span class="ot">&lt;-</span> <span class="fl">0.10</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>  })</span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a>  <span class="fu">model</span>({</span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>    ka <span class="ot">&lt;-</span> <span class="fu">exp</span>(tka <span class="sc">+</span> eta.ka)</span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>    cl <span class="ot">&lt;-</span> <span class="fu">exp</span>(tcl <span class="sc">+</span> eta.cl)</span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>    v <span class="ot">&lt;-</span> <span class="fu">exp</span>(tv <span class="sc">+</span> eta.v)</span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>    <span class="fu">linCmt</span>() <span class="sc">~</span> <span class="fu">prop</span>(prop.err)</span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>  })</span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>}</span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a>fit_base <span class="ot">&lt;-</span> <span class="fu">nlmixr2</span>(</span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a>  warf_pk, pkdata,</span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a>  <span class="at">est =</span> <span class="st">&quot;focei&quot;</span>,</span>
+<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a>  <span class="at">control =</span> nlmixr2est<span class="sc">::</span><span class="fu">foceiControl</span>(<span class="at">print =</span> <span class="dv">0</span>),</span>
+<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a>  <span class="at">table =</span> nlmixr2est<span class="sc">::</span><span class="fu">tableControl</span>(<span class="at">cwres =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>fit_base<span class="sc">$</span>parFixedDf</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt;            Estimate         SE      %RSE Back-transformed  CI Lower  CI Upper</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; tka      -0.5030012 0.22428497 44.589349        0.6047131 0.3896168 0.9385579</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; tcl      -1.9965781 0.05638322  2.823993        0.1357992 0.1215916 0.1516668</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt; tv        2.0990027 0.04168834  1.986102        8.1580297 7.5179616 8.8525922</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; prop.err  0.2254709 0.03131010 13.886538        0.2254709 0.1641042 0.2868376</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt;          BSV(CV%) Shrink(SD)%</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; tka      72.79115   49.671620</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; tcl      26.84370    3.267123</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; tv       19.41236   21.784693</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; prop.err       NA          NA</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">&quot;Base OFV: %.3f</span><span class="sc">\n</span><span class="st">&quot;</span>, fit_base<span class="sc">$</span>objf))</span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt; Base OFV: 474.491</span></span></code></pre></div>
+<hr />
+</div>
+<div id="candidate-specification-strategies" class="section level3">
+<h3>3. Candidate specification strategies</h3>
+<p><code>runSCM()</code> supports two main ways to define the search
+space.</p>
+<p>The most explicit approach is <code>pairsVec</code>: a list of
+<code>list(var=, covar=, shapes=)</code> items. Each item names the PK
+parameter (<code>var</code>), the covariate (<code>covar</code>), and
+optionally the functional shapes to test. This is useful when you want
+exact control over which relationships are evaluated.</p>
+<p>When the search space is a full Cartesian product of parameters and
+covariates, a shorter option is <code>varsVec</code> plus
+<code>covarsVec</code>, with <code>catvarsVec</code> used for
+categorical covariates. That is the approach used in the worked example
+below.</p>
+<p>The <code>data</code> argument must be supplied explicitly whenever
+the base model does not reference a covariate column — otherwise
+<code>nlme::getData(fit)</code> may drop it.</p>
+<div id="runscm-argument-reference" class="section level4">
+<h4><code>runSCM()</code> argument reference</h4>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Argument</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>varsVec</code></td>
+<td><code>NULL</code></td>
+<td>PK parameters to test (used with <code>covarsVec</code>; ignored
+when <code>pairsVec</code> supplied)</td>
+</tr>
+<tr class="even">
+<td><code>covarsVec</code></td>
+<td><code>NULL</code></td>
+<td>Continuous covariates (ignored when <code>pairsVec</code>
+supplied)</td>
+</tr>
+<tr class="odd">
+<td><code>catvarsVec</code></td>
+<td><code>NULL</code></td>
+<td>Categorical covariates; indicator columns created automatically</td>
+</tr>
+<tr class="even">
+<td><code>pairsVec</code></td>
+<td><code>NULL</code></td>
+<td>Explicit parameter-covariate pairs; overrides
+<code>varsVec</code>/<code>covarsVec</code></td>
+</tr>
+<tr class="odd">
+<td><code>shapes</code></td>
+<td><code>&quot;power&quot;</code></td>
+<td>Shape(s) for continuous covariates: <code>&quot;power&quot;</code>,
+<code>&quot;lin&quot;</code>, <code>&quot;log&quot;</code>, <code>&quot;identity&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>customShapes</code></td>
+<td><code>NULL</code></td>
+<td>Named list of additional shape builder functions</td>
+</tr>
+<tr class="odd">
+<td><code>centers</code></td>
+<td><code>NULL</code></td>
+<td>Named vector fixing the reference (centering) value for continuous
+covariates, e.g. <code>c(BW = 70)</code>, instead of the per-dataset
+median</td>
+</tr>
+<tr class="even">
+<td><code>pVal</code></td>
+<td><code>list(fwd=0.05, bck=0.01)</code></td>
+<td>Forward and backward p-value thresholds</td>
+</tr>
+<tr class="odd">
+<td><code>searchType</code></td>
+<td><code>&quot;scm&quot;</code></td>
+<td><code>&quot;scm&quot;</code> (both phases), <code>&quot;forward&quot;</code>, or
+<code>&quot;backward&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>data</code></td>
+<td><code>NULL</code></td>
+<td>Dataset; required when base model omits covariate columns</td>
+</tr>
+<tr class="odd">
+<td><code>inits</code></td>
+<td><code>list()</code></td>
+<td>Initial theta estimates for covariate parameters, by shape</td>
+</tr>
+<tr class="even">
+<td><code>missingToken</code></td>
+<td><code>NA</code></td>
+<td>Sentinel value for missing covariate observations</td>
+</tr>
+<tr class="odd">
+<td><code>catCutoff</code></td>
+<td><code>0.05</code></td>
+<td>Minimum non-reference level prevalence to test</td>
+</tr>
+<tr class="even">
+<td><code>includedRelations</code></td>
+<td><code>NULL</code></td>
+<td>Relations forced into the backward-start model</td>
+</tr>
+<tr class="odd">
+<td><code>outputDir</code></td>
+<td><code>NULL</code></td>
+<td>Subdirectory for saved model <code>.rds</code> files; auto-named
+when <code>NULL</code></td>
+</tr>
+<tr class="even">
+<td><code>saveModels</code></td>
+<td><code>TRUE</code></td>
+<td>Write fitted models to <code>outputDir</code></td>
+</tr>
+<tr class="odd">
+<td><code>verbose</code></td>
+<td><code>FALSE</code></td>
+<td>Print full candidate tables at each step</td>
+</tr>
+<tr class="even">
+<td><code>control</code></td>
+<td><code>NULL</code></td>
+<td>Control object (e.g. <code>saemControl()</code>) passed to every
+<code>nlmixr2()</code> call</td>
+</tr>
+<tr class="odd">
+<td><code>print</code></td>
+<td><code>100</code></td>
+<td>Optimiser progress-print interval, applied as
+<code>control$print</code></td>
+</tr>
+<tr class="even">
+<td><code>restart</code></td>
+<td><code>FALSE</code></td>
+<td>Discard existing cache and start fresh</td>
+</tr>
+<tr class="odd">
+<td><code>workers</code></td>
+<td><code>NULL</code></td>
+<td>Sequential; set &gt; 1 for parallel candidate fitting</td>
+</tr>
+<tr class="even">
+<td><code>confirm</code></td>
+<td><code>TRUE</code></td>
+<td>Prompt for confirmation in interactive sessions</td>
+</tr>
+<tr class="odd">
+<td><code>profileInit</code></td>
+<td><code>FALSE</code></td>
+<td>Warm-start every forward candidate’s covariate coefficient with a
+frozen 1-D profile (Brent method)</td>
+</tr>
+<tr class="even">
+<td><code>profileInitOnStall</code></td>
+<td><code>TRUE</code></td>
+<td>Warm-start only candidates whose ordinary fit stalls (OFV
+improvement <code>&lt;= stallTol</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>stallTol</code></td>
+<td><code>0</code></td>
+<td>OFV-improvement threshold below which a forward candidate is
+considered stalled</td>
+</tr>
+<tr class="even">
+<td><code>maxRetries</code></td>
+<td><code>3L</code></td>
+<td>Maximum retry attempts per candidate when the OFV is deemed
+unrealistic</td>
+</tr>
+<tr class="odd">
+<td><code>maxDeltaOFV</code></td>
+<td><code>Inf</code></td>
+<td>Absolute ceiling on plausible <code>\|dOFV\|</code> before a
+candidate is retried</td>
+</tr>
+<tr class="even">
+<td><code>retryPerturbSD</code></td>
+<td><code>0.5</code></td>
+<td>SD of the log-normal perturbation applied to <code>cov_init</code>
+on odd-numbered retries</td>
+</tr>
+<tr class="odd">
+<td><code>retrySmallInit</code></td>
+<td><code>0.01</code></td>
+<td>Near-zero covariate theta init used on even-numbered retries</td>
+</tr>
+<tr class="even">
+<td><code>retryOFVTolerance</code></td>
+<td><code>NULL</code></td>
+<td>Margin by which candidate OFV must exceed the parent before
+retrying; auto-detected (<code>10</code> for SAEM, <code>0</code>
+otherwise) when <code>NULL</code></td>
+</tr>
+<tr class="odd">
+<td><code>retryFailOnExhaustion</code></td>
+<td><code>FALSE</code></td>
+<td>Exclude a candidate as failed (instead of accepting the best retry)
+when all retries are exhausted</td>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+</div>
+<div id="covariate-shapes" class="section level3">
+<h3>4. Covariate shapes</h3>
+<p><code>runSCM()</code> supports four built-in shapes for continuous
+covariates. <code>&quot;power&quot;</code> and <code>&quot;lin&quot;</code> use the
+<strong>observed median</strong> as the centering value, computed
+automatically from the data.</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Shape</th>
+<th>Expression in model body</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>&quot;power&quot;</code></td>
+<td><code>log(cov / median(cov))</code></td>
+<td>Allometric / power-law relationship</td>
+</tr>
+<tr class="even">
+<td><code>&quot;lin&quot;</code></td>
+<td><code>cov - median(cov)</code></td>
+<td>Linear deviation from the median</td>
+</tr>
+<tr class="odd">
+<td><code>&quot;log&quot;</code></td>
+<td><code>log(cov)</code></td>
+<td>Log-transformed covariate (no centering)</td>
+</tr>
+<tr class="even">
+<td><code>&quot;identity&quot;</code></td>
+<td><code>cov</code></td>
+<td>Raw covariate (no transformation)</td>
+</tr>
+</tbody>
+</table>
+<p>Categorical covariates always use the <code>&quot;cat&quot;</code> shape: a
+binary indicator column <code>cov_&lt;level&gt;</code> multiplied by a
+theta parameter. The reference level is the most frequent category.
+Levels representing fewer than <code>catCutoff</code> (default 5 %) of
+subjects are merged with the reference and not tested.</p>
+<p>Custom shapes can be added via the <code>customShapes</code> argument
+— a named list of functions <code>function(col, center, level)</code>
+that return a character expression string.</p>
+<p>By default <code>&quot;power&quot;</code> and <code>&quot;lin&quot;</code> center on the
+per-dataset median, which can differ between datasets fit with the same
+model. Pass <code>centers</code> (a named numeric vector, e.g.
+<code>centers = c(wt = 70)</code>) to fix the reference value for one or
+more continuous covariates instead, so covariate coefficients stay on a
+consistent reference across datasets. Covariates not named in
+<code>centers</code> continue to use the median.</p>
+<hr />
+</div>
+<div id="run-the-scm" class="section level3">
+<h3>5. Run the SCM</h3>
+<p>When the search space is a full Cartesian product of parameters ×
+covariates, use <code>varsVec</code> and <code>covarsVec</code> instead
+of enumerating every pair.</p>
+<p>The example below tests <code>wt~cl</code>, <code>wt~v</code>,
+<code>sex~cl</code>, and <code>sex~v</code>, with both power and linear
+shapes for the continuous covariate — six candidates in total.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>scm <span class="ot">&lt;-</span> <span class="fu">runSCM</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">fit        =</span> fit_base,</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">data       =</span> pkdata,</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  <span class="at">varsVec    =</span> <span class="fu">c</span>(<span class="st">&quot;cl&quot;</span>, <span class="st">&quot;v&quot;</span>),</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  <span class="at">covarsVec  =</span> <span class="st">&quot;wt&quot;</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  <span class="at">catvarsVec =</span> <span class="st">&quot;sex&quot;</span>,</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>  <span class="at">shapes     =</span> <span class="fu">c</span>(<span class="st">&quot;power&quot;</span>, <span class="st">&quot;lin&quot;</span>),</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>  <span class="at">pVal       =</span> <span class="fu">list</span>(<span class="at">fwd =</span> <span class="fl">0.05</span>, <span class="at">bck =</span> <span class="fl">0.01</span>),</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>  <span class="at">searchType =</span> <span class="st">&quot;scm&quot;</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  <span class="at">saveModels =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  <span class="at">verbose    =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a>  <span class="at">restart    =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>  <span class="at">print      =</span> <span class="dv">0</span>,</span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>  <span class="at">workers    =</span> <span class="dv">1</span><span class="dt">L</span>,</span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>  <span class="at">rxThreads  =</span> <span class="dv">2</span><span class="dt">L</span>,</span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>  <span class="at">confirm    =</span> <span class="cn">FALSE</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a>)</span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt;                step    covar var shape     objf deltObjf      AIC      BIC</span></span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v    1 wt_power   v power 447.8365 26.65464 925.1436 953.3473</span></span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt;                numParams  qchisqr      pchisqr included searchType</span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v         8 3.841459 2.432662e-07      yes    forward</span></span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt;                      covNames covarEffect bsvReduction</span></span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v cov_wt_power_v   0.8593107     86.25735</span></span>
+<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt;                 step    covar var shape     objf deltObjf      AIC     BIC</span></span>
+<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl    2 wt_power  cl power 442.4678 5.368724 921.7749 953.504</span></span>
+<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt;                 numParams  qchisqr    pchisqr included searchType</span></span>
+<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl         9 3.841459 0.02050097      yes    forward</span></span>
+<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="co">#&gt;                        covNames covarEffect bsvReduction</span></span>
+<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl cov_wt_power_cl   0.5768601     16.30541</span></span>
+<span id="cb5-30"><a href="#cb5-30" tabindex="-1"></a><span class="co">#&gt;                 step    covar var shape     objf deltObjf      AIC      BIC</span></span>
+<span id="cb5-31"><a href="#cb5-31" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl    1 wt_power  cl power 447.7641 5.296325 925.0712 953.2749</span></span>
+<span id="cb5-32"><a href="#cb5-32" tabindex="-1"></a><span class="co">#&gt;                 numParams  qchisqr    pchisqr included searchType</span></span>
+<span id="cb5-33"><a href="#cb5-33" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl         8 6.634897 0.02137047  dropped   backward</span></span>
+<span id="cb5-34"><a href="#cb5-34" tabindex="-1"></a><span class="co">#&gt;                        covNames covarEffect bsvReduction</span></span>
+<span id="cb5-35"><a href="#cb5-35" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl cov_wt_power_cl   0.5768601     16.84933</span></span>
+<span id="cb5-36"><a href="#cb5-36" tabindex="-1"></a><span class="co">#&gt; Direction  Step  Relation                Ref OFV         OFV      dOFV    p-value  Decision </span></span>
+<span id="cb5-37"><a href="#cb5-37" tabindex="-1"></a><span class="co">#&gt; ------------------------------------------------------------------------------------------- </span></span>
+<span id="cb5-38"><a href="#cb5-38" tabindex="-1"></a><span class="co">#&gt; Forward    1     wt_power~v [power]      421.182     447.837    26.655     0.0000  Added</span></span>
+<span id="cb5-39"><a href="#cb5-39" tabindex="-1"></a><span class="co">#&gt; Forward    2     wt_power~cl [power]     437.099     442.468     5.369     0.0205  Added</span></span>
+<span id="cb5-40"><a href="#cb5-40" tabindex="-1"></a><span class="co">#&gt; Forward    3     sex_female~v [cat]      437.484     439.976     2.492     0.1144  Not selected</span></span>
+<span id="cb5-41"><a href="#cb5-41" tabindex="-1"></a><span class="co">#&gt; Backward   1     wt_power~cl [power]     442.468     447.764     5.296     0.0214  Removed</span></span>
+<span id="cb5-42"><a href="#cb5-42" tabindex="-1"></a><span class="co">#&gt; Backward   2     wt_power~v [power]      447.764     474.490    26.726     0.0000  Retained</span></span>
+<span id="cb5-43"><a href="#cb5-43" tabindex="-1"></a><span class="co">#&gt; Direction  Step  Relation                Ref OFV         OFV      dOFV    p-value  Decision </span></span>
+<span id="cb5-44"><a href="#cb5-44" tabindex="-1"></a><span class="co">#&gt; ------------------------------------------------------------------------------------------- </span></span>
+<span id="cb5-45"><a href="#cb5-45" tabindex="-1"></a><span class="co">#&gt; Forward    1     wt_power~v [power]      421.182     447.837    26.655     0.0000  Added</span></span>
+<span id="cb5-46"><a href="#cb5-46" tabindex="-1"></a><span class="co">#&gt; Forward    1     wt_lin~v [lin]          424.170     449.330    25.161     0.0000  Not selected</span></span>
+<span id="cb5-47"><a href="#cb5-47" tabindex="-1"></a><span class="co">#&gt; Forward    1     sex_female~v [cat]      433.696     454.094    20.397     0.0000  Not selected</span></span>
+<span id="cb5-48"><a href="#cb5-48" tabindex="-1"></a><span class="co">#&gt; Forward    1     wt_power~cl [power]     465.843     470.167     4.324     0.0376  Not selected</span></span>
+<span id="cb5-49"><a href="#cb5-49" tabindex="-1"></a><span class="co">#&gt; Forward    1     wt_lin~cl [lin]         466.915     470.703     3.788     0.0516  Not selected</span></span>
+<span id="cb5-50"><a href="#cb5-50" tabindex="-1"></a><span class="co">#&gt; Forward    1     sex_female~cl [cat]     473.468     473.980     0.512     0.4744  Not selected</span></span>
+<span id="cb5-51"><a href="#cb5-51" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-52"><a href="#cb5-52" tabindex="-1"></a><span class="co">#&gt; Forward    2     wt_power~cl [power]     437.099     442.468     5.369     0.0205  Added</span></span>
+<span id="cb5-53"><a href="#cb5-53" tabindex="-1"></a><span class="co">#&gt; Forward    2     wt_lin~cl [lin]         438.113     442.975     4.862     0.0275  Not selected</span></span>
+<span id="cb5-54"><a href="#cb5-54" tabindex="-1"></a><span class="co">#&gt; Forward    2     sex_female~v [cat]      442.539     445.188     2.649     0.1036  Not selected</span></span>
+<span id="cb5-55"><a href="#cb5-55" tabindex="-1"></a><span class="co">#&gt; Forward    2     sex_female~cl [cat]     446.624     447.230     0.606     0.4362  Not selected</span></span>
+<span id="cb5-56"><a href="#cb5-56" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-57"><a href="#cb5-57" tabindex="-1"></a><span class="co">#&gt; Forward    3     sex_female~v [cat]      437.484     439.976     2.492     0.1144  Not selected</span></span>
+<span id="cb5-58"><a href="#cb5-58" tabindex="-1"></a><span class="co">#&gt; Forward    3     sex_female~cl [cat]     439.450     440.959     1.509     0.2193  Not selected</span></span>
+<span id="cb5-59"><a href="#cb5-59" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-60"><a href="#cb5-60" tabindex="-1"></a><span class="co">#&gt; Backward   1     wt_power~v [power]      442.468     470.167    27.699     0.0000  Retained</span></span>
+<span id="cb5-61"><a href="#cb5-61" tabindex="-1"></a><span class="co">#&gt; Backward   1     wt_power~cl [power]     442.468     447.764     5.296     0.0214  Removed</span></span>
+<span id="cb5-62"><a href="#cb5-62" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-63"><a href="#cb5-63" tabindex="-1"></a><span class="co">#&gt; Backward   2     wt_power~v [power]      447.764     474.490    26.726     0.0000  Retained</span></span></code></pre></div>
+<hr />
+</div>
+<div id="interpreting-the-results" class="section level3">
+<h3>6. Interpreting the results</h3>
+<p><code>runSCM()</code> returns a named list with three elements:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">names</span>(scm)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;summaryTable&quot; &quot;resFwd&quot;       &quot;resBck&quot;</span></span></code></pre></div>
+<div id="summary-table" class="section level4">
+<h4>Summary table</h4>
+<p><code>summaryTable</code> contains one row per candidate tested
+across all steps and both phases, with the columns most useful for
+review:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>cols <span class="ot">&lt;-</span> <span class="fu">intersect</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="fu">c</span>(</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>    <span class="st">&quot;searchType&quot;</span>, <span class="st">&quot;step&quot;</span>, <span class="st">&quot;covar&quot;</span>, <span class="st">&quot;var&quot;</span>, <span class="st">&quot;shape&quot;</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>    <span class="st">&quot;deltObjf&quot;</span>, <span class="st">&quot;pchisqr&quot;</span>, <span class="st">&quot;included&quot;</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  ),</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="fu">colnames</span>(scm<span class="sc">$</span>summaryTable)</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>)</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="fu">print</span>(scm<span class="sc">$</span>summaryTable[, cols])</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;                    searchType step      covar var shape   deltObjf      pchisqr</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl       forward    1   wt_power  cl power  4.3240231 3.757798e-02</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl         forward    1     wt_lin  cl   lin  3.7880142 5.162086e-02</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v        forward    1   wt_power   v power 26.6546376 2.432662e-07</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_v          forward    1     wt_lin   v   lin 25.1607684 5.274431e-07</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl     forward    1 sex_female  cl   cat  0.5116035 4.744456e-01</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v      forward    1 sex_female   v   cat 20.3973712 6.291616e-06</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl1      forward    2   wt_power  cl power  5.3687243 2.050097e-02</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl1        forward    2     wt_lin  cl   lin  4.8618158 2.745742e-02</span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl1    forward    2 sex_female  cl   cat  0.6063690 4.361582e-01</span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v1     forward    2 sex_female   v   cat  2.6485710 1.036430e-01</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl2    forward    3 sex_female  cl   cat  1.5088424 2.193158e-01</span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v2     forward    3 sex_female   v   cat  2.4917573 1.144439e-01</span></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl2     backward    1   wt_power  cl power  5.2963247 2.137047e-02</span></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v2      backward    1   wt_power   v power 27.6993854 1.417077e-07</span></span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v1      backward    2   wt_power   v power 26.7262383 2.344167e-07</span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt;                    included</span></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl          no</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl            no</span></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v          yes</span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_v             no</span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl        no</span></span>
+<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v         no</span></span>
+<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl1        yes</span></span>
+<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl1           no</span></span>
+<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl1       no</span></span>
+<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v1        no</span></span>
+<span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl2       no</span></span>
+<span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v2        no</span></span>
+<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl2    dropped</span></span>
+<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v2    retained</span></span>
+<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v1    retained</span></span></code></pre></div>
+<p>Key columns:</p>
+<table>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>searchType</code></td>
+<td><code>&quot;forward&quot;</code> or <code>&quot;backward&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>step</code></td>
+<td>Step number within the phase</td>
+</tr>
+<tr class="odd">
+<td><code>covar</code></td>
+<td>Covariate name</td>
+</tr>
+<tr class="even">
+<td><code>var</code></td>
+<td>PK parameter</td>
+</tr>
+<tr class="odd">
+<td><code>shape</code></td>
+<td>Functional shape tested</td>
+</tr>
+<tr class="even">
+<td><code>deltObjf</code></td>
+<td>ΔOFV (candidate − reference: negative = improvement in forward,
+positive = deterioration in backward)</td>
+</tr>
+<tr class="odd">
+<td><code>pchisqr</code></td>
+<td>p-value from chi-squared test (1 df)</td>
+</tr>
+<tr class="even">
+<td><code>bsvReduction</code></td>
+<td>Reduction in BSV for <code>var</code> (%)</td>
+</tr>
+<tr class="odd">
+<td><code>covarEffect</code></td>
+<td>Estimated effect magnitude at the covariate extremes</td>
+</tr>
+<tr class="even">
+<td><code>included</code></td>
+<td><code>&quot;yes&quot;</code> (added in forward), <code>&quot;no&quot;</code> (rejected
+in forward), <code>&quot;dropped&quot;</code> (removed in backward),
+<code>&quot;retained&quot;</code> (tested in backward but kept in model)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="forward-search-detail" class="section level4">
+<h4>Forward search detail</h4>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>fwd_tbl <span class="ot">&lt;-</span> scm<span class="sc">$</span>resFwd[[<span class="dv">2</span>]]</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(fwd_tbl) <span class="sc">&amp;&amp;</span> <span class="fu">nrow</span>(fwd_tbl) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="fu">print</span>(fwd_tbl[</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>    fwd_tbl<span class="sc">$</span>included <span class="sc">==</span> <span class="st">&quot;yes&quot;</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>    <span class="fu">intersect</span>(<span class="fu">c</span>(</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>      <span class="st">&quot;step&quot;</span>, <span class="st">&quot;covar&quot;</span>, <span class="st">&quot;var&quot;</span>, <span class="st">&quot;shape&quot;</span>, <span class="st">&quot;deltObjf&quot;</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>      <span class="st">&quot;pchisqr&quot;</span>, <span class="st">&quot;bsvReduction&quot;</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>    ), <span class="fu">colnames</span>(fwd_tbl))</span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>  ])</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">&quot;No covariates accepted in forward search.</span><span class="sc">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>fwd_tbl</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt;                    step      covar var shape     objf   deltObjf      AIC</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl       1   wt_power  cl power 470.1671  4.3240231 947.4743</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl         1     wt_lin  cl   lin 470.7031  3.7880142 948.0103</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v        1   wt_power   v power 447.8365 26.6546376 925.1436</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_v          1     wt_lin   v   lin 449.3304 25.1607684 926.6375</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl     1 sex_female  cl   cat 473.9795  0.5116035 951.2867</span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v      1 sex_female   v   cat 454.0938 20.3973712 931.4009</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl1      2   wt_power  cl power 442.4678  5.3687243 921.7749</span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl1        2     wt_lin  cl   lin 442.9747  4.8618158 922.2818</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl1    2 sex_female  cl   cat 447.2301  0.6063690 926.5373</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v1     2 sex_female   v   cat 445.1879  2.6485710 924.4951</span></span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl2    3 sex_female  cl   cat 440.9589  1.5088424 922.2661</span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v2     3 sex_female   v   cat 439.9760  2.4917573 921.2832</span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt;                         BIC numParams  qchisqr      pchisqr included searchType</span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl    975.6779         8 3.841459 3.757798e-02       no    forward</span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl      976.2139         8 3.841459 5.162086e-02       no    forward</span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v     953.3473         8 3.841459 2.432662e-07      yes    forward</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_v       954.8411         8 3.841459 5.274431e-07       no    forward</span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl  979.4903         8 3.841459 4.744456e-01       no    forward</span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v   959.6045         8 3.841459 6.291616e-06       no    forward</span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl1   953.5040         9 3.841459 2.050097e-02      yes    forward</span></span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl1     954.0109         9 3.841459 2.745742e-02       no    forward</span></span>
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl1 958.2664         9 3.841459 4.361582e-01       no    forward</span></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v1  956.2242         9 3.841459 1.036430e-01       no    forward</span></span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl2 957.5206        10 3.841459 2.193158e-01       no    forward</span></span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v2  956.5377        10 3.841459 1.144439e-01       no    forward</span></span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a><span class="co">#&gt;                             covNames  covarEffect bsvReduction</span></span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl      cov_wt_power_cl  0.525854679    13.300446</span></span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl          cov_wt_lin_cl  0.007405226    11.671437</span></span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v        cov_wt_power_v  0.859310689    86.257349</span></span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_v            cov_wt_lin_v  0.013266915    84.325872</span></span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl  cov_sex_female_cl -0.095430676     1.138791</span></span>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v    cov_sex_female_v -0.392221612    82.957720</span></span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl1     cov_wt_power_cl  0.576860120    16.305410</span></span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a><span class="co">#&gt; cov_wt_lin_cl1         cov_wt_lin_cl  0.008266872    14.835484</span></span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl1 cov_sex_female_cl -0.099122283     1.212893</span></span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v1   cov_sex_female_v -0.159197716    61.937571</span></span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_cl2 cov_sex_female_cl  0.210572065     5.863930</span></span>
+<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a><span class="co">#&gt; cov_sex_female_v2   cov_sex_female_v -0.161627330    46.007515</span></span></code></pre></div>
+</div>
+<div id="backward-search-detail" class="section level4">
+<h4>Backward search detail</h4>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>bck_tbl <span class="ot">&lt;-</span> scm<span class="sc">$</span>resBck[[<span class="dv">2</span>]]</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(bck_tbl) <span class="sc">&amp;&amp;</span> <span class="fu">nrow</span>(bck_tbl) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="fu">print</span>(bck_tbl[, <span class="fu">intersect</span>(<span class="fu">c</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>    <span class="st">&quot;step&quot;</span>, <span class="st">&quot;covar&quot;</span>, <span class="st">&quot;var&quot;</span>, <span class="st">&quot;shape&quot;</span>, <span class="st">&quot;deltObjf&quot;</span>,</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>    <span class="st">&quot;pchisqr&quot;</span>, <span class="st">&quot;included&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>  ), <span class="fu">colnames</span>(bck_tbl))])</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">&quot;No backward elimination steps.</span><span class="sc">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>bck_tbl</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt;                 step    covar var shape     objf  deltObjf      AIC      BIC</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl    1 wt_power  cl power 447.7641  5.296325 925.0712 953.2749</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v     1 wt_power   v power 470.1672 27.699385 947.4743 975.6779</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v1    2 wt_power   v power 474.4903 26.726238 949.7975 974.4757</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="co">#&gt;                 numParams  qchisqr      pchisqr included searchType</span></span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl         8 6.634897 2.137047e-02  dropped   backward</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v          8 6.634897 1.417077e-07 retained   backward</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v1         7 6.634897 2.344167e-07 retained   backward</span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt;                        covNames covarEffect bsvReduction</span></span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_cl cov_wt_power_cl   0.5768601     16.84933</span></span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v   cov_wt_power_v   0.8793381     88.72094</span></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v1  cov_wt_power_v   0.8509072     89.61420</span></span></code></pre></div>
+</div>
+<div id="final-model" class="section level4">
+<h4>Final model</h4>
+<p>The final model fit is in <code>resBck[[1]]</code> after a full SCM
+(or <code>resFwd[[1]]</code> after a forward-only search):</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>fit_final <span class="ot">&lt;-</span> scm<span class="sc">$</span>resBck[[<span class="dv">1</span>]]</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>fit_final<span class="sc">$</span>parFixedDf</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co">#&gt;                  Estimate         SE      %RSE Back-transformed  CI Lower</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt; tka            -0.4692397 0.21878337 46.625076        0.6254776 0.4073644</span></span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a><span class="co">#&gt; tcl            -2.0005224 0.05491388  2.744977        0.1352646 0.1214623</span></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a><span class="co">#&gt; tv              2.1200409 0.03061905  1.444267        8.3314780 7.8461945</span></span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a><span class="co">#&gt; prop.err        0.2251575 0.02924468 12.988546        0.2251575 0.1678389</span></span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v  0.8509072 0.12399075 14.571595        0.8509072 0.6078898</span></span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a><span class="co">#&gt;                 CI Upper BSV(CV%) Shrink(SD)%</span></span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt; tka            0.9603743 70.21920   49.267810</span></span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt; tcl            0.1506354 26.98989    2.819955</span></span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a><span class="co">#&gt; tv             8.8467760  6.17619   59.971497</span></span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a><span class="co">#&gt; prop.err       0.2824760       NA          NA</span></span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a><span class="co">#&gt; cov_wt_power_v 1.0939247       NA          NA</span></span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a>  <span class="st">&quot;Final OFV: %.3f   ΔOFV vs base: %.3f</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a>  fit_final<span class="sc">$</span>objf, fit_base<span class="sc">$</span>objf <span class="sc">-</span> fit_final<span class="sc">$</span>objf</span>
+<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a>))</span>
+<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a><span class="co">#&gt; Final OFV: 447.764   ΔOFV vs base: 26.727</span></span></code></pre></div>
+<hr />
+</div>
+</div>
+<div id="forced-inclusions" class="section level3">
+<h3>7. Forced inclusions</h3>
+<p><code>includedRelations</code> forces specific covariate
+relationships into the model at the start of backward elimination — even
+if they were not accepted during forward inclusion. This mirrors PsN’s
+<code>[included_relations]</code> block:</p>
+<p>The <code>wt~cl</code> power relationship will be present at the
+start of backward elimination regardless of whether it was significant
+in the forward phase. It remains eligible for removal during backward
+elimination like any other covariate.</p>
+<hr />
+</div>
+<div id="forward-only-or-backward-only-search" class="section level3">
+<h3>8. Forward-only or backward-only search</h3>
+<p>Set <code>searchType</code> to run a single phase:</p>
+<p>With <code>searchType = &quot;forward&quot;</code>, the run stops after the
+inclusion phase and the forward-final model is returned in
+<code>resFwd[[1]]</code>. With <code>searchType = &quot;backward&quot;</code>,
+<code>runSCM()</code> applies elimination to a model that already
+contains covariate terms.</p>
+<hr />
+</div>
+<div id="parallel-candidate-fitting" class="section level3">
+<h3>9. Parallel candidate fitting</h3>
+<p>Each candidate model at a given step is an independent fit, so
+parallelisation gives a near-linear speed-up up to the number of
+candidates. Install the optional <code>future</code>,
+<code>future.apply</code>, and <code>progressr</code> packages and set
+<code>workers</code> to the desired number of parallel processes.</p>
+<p>Sequential execution (<code>workers = NULL</code> or
+<code>workers = 1</code>) requires no additional packages.</p>
+<blockquote>
+<p><strong>Note</strong>: parallel SCM workers load from the
+<strong>installed</strong> package. If you are developing with
+<code>devtools::load_all()</code>, install the package first with
+<code>devtools::install()</code> before using
+<code>workers &gt; 1</code>.</p>
+</blockquote>
+<hr />
+</div>
+<div id="missing-covariate-values" class="section level3">
+<h3>10. Missing covariate values</h3>
+<p>When a covariate has missing observations, set
+<code>missingToken</code> to the sentinel used in the data
+(e.g. <code>-99</code> or <code>&quot;.&quot;</code>) in addition to
+<code>NA</code>. <code>runSCM()</code> wraps the covariate expression in
+an <code>ifelse()</code> guard that imputes the population-typical
+value:</p>
+<ul>
+<li><strong>Continuous</strong>: imputes the median by evaluating the
+shape expression at <code>cov = median(cov)</code>. This gives
+<code>0</code> for <code>&quot;power&quot;</code>
+(<code>log(median(cov)/median(cov)) = 0</code>) and <code>&quot;lin&quot;</code>
+(<code>median(cov)-median(cov)= 0</code>), <code>log(median(cov))</code>
+for <code>&quot;log&quot;</code>, and the <code>median(cov)</code> itself for
+<code>&quot;identity&quot;</code>.</li>
+<li><strong>Categorical</strong>: imputes the mode (most frequent
+level).</li>
+</ul>
+<hr />
+</div>
+</div>
+<div id="output-files" class="section level2">
+<h2>Output files</h2>
+<p>When <code>saveModels = TRUE</code> (the default),
+<code>runSCM()</code> writes the following files to the output directory
+(auto-named <code>&lt;fitName&gt;_scm_&lt;N&gt;</code> in the working
+directory).</p>
+<p>Two CSV summaries and one log file are written at the end of the
+search:</p>
+<table>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>scm_step_summary.csv</code></td>
+<td>Best candidate per step (one row per step)</td>
+</tr>
+<tr class="even">
+<td><code>scm_all_candidates.csv</code></td>
+<td>Every candidate model tested, across all steps and both phases</td>
+</tr>
+<tr class="odd">
+<td><code>scm_log.txt</code></td>
+<td>Human-readable run log with header metadata</td>
+</tr>
+</tbody>
+</table>
+<p>Three <code>.rds</code> files are written <strong>per accepted
+step</strong> (not per candidate). The <code>&lt;key&gt;</code> segment
+is <code>&lt;covar&gt;_&lt;var&gt;</code> for the covariate that was
+added (forward) or removed (backward) at that step:</p>
+<table>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>forward_step_&lt;N&gt;_fit_&lt;key&gt;.rds</code></td>
+<td>Fit object for the model accepted at forward step N</td>
+</tr>
+<tr class="even">
+<td><code>forward_step_&lt;N&gt;_table_&lt;key&gt;.rds</code></td>
+<td>One-row data frame for the accepted best candidate</td>
+</tr>
+<tr class="odd">
+<td><code>forward_step_&lt;N&gt;_completetable_&lt;key&gt;.rds</code></td>
+<td>All candidates tested across forward steps 1..N (cumulative)</td>
+</tr>
+<tr class="even">
+<td><code>backward_step_&lt;N&gt;_fit_&lt;key&gt;.rds</code></td>
+<td>Fit object after the covariate is removed at backward step N</td>
+</tr>
+<tr class="odd">
+<td><code>backward_step_&lt;N&gt;_table_&lt;key&gt;.rds</code></td>
+<td>One-row data frame for the removed covariate</td>
+</tr>
+<tr class="even">
+<td><code>backward_step_&lt;N&gt;_completetable_&lt;key&gt;.rds</code></td>
+<td>All candidates tested across backward steps 1..N (cumulative)</td>
+</tr>
+</tbody>
+</table>
+<p>Only the accepted (best-at-step) candidate is persisted to
+<code>.rds</code>; per-candidate fit results are not written
+individually but are available in <code>scm_all_candidates.csv</code>
+and in the cumulative <code>_completetable_</code> snapshots.</p>
+<blockquote>
+<p>The <code>_table_</code> and <code>_completetable_</code>
+<code>.rds</code> files duplicate information in the CSVs but at full
+numeric precision and as per-step checkpoints (useful for
+resume/inspection mid-run). Routine post-hoc analysis can rely on the
+CSVs alone.</p>
+</blockquote>
+<p>Set <code>saveModels = FALSE</code> to run without writing any files,
+for example when exploring the search space in a scratch session.</p>
+<hr />
+</div>
+<div id="tips-for-a-robust-scm" class="section level2">
+<h2>Tips for a robust SCM</h2>
+<p><strong>Sample size</strong>: the SCM uses a chi-squared
+approximation with 1 degree of freedom. The rule of thumb is at least
+50–100 subjects for a reliable test; sparse data leads to inflated type
+I error in forward inclusion.</p>
+<p><strong>p-value thresholds</strong>: the conventional PsN defaults
+are <code>fwd = 0.05</code> and <code>bck = 0.01</code>. In exploratory
+analyses, a more liberal forward threshold (e.g. 0.10) avoids missing
+important relationships at the cost of higher false-positive rates.</p>
+<p><strong>Shape choice</strong>: the power shape
+(<code>log(cov/median)</code>) is appropriate for weight and other
+allometric predictors. Use <code>shapes = c(&quot;power&quot;, &quot;lin&quot;)</code> to
+test both and let the data decide.</p>
+<p><strong>Warm-starting</strong>: when a covariate is accepted, the
+estimated theta from that step is automatically used as the starting
+estimate for all subsequent steps that involve the same covariate shape,
+which speeds convergence and improves numerical stability.</p>
+<p><strong>Stalled candidates</strong>: with ODE models, solver noise
+can flatten the outer objective enough that a candidate’s fit never
+leaves its zero-effect initial estimate. By default
+(<code>profileInitOnStall = TRUE</code>), a candidate whose OFV
+improvement over its parent is <code>&lt;= stallTol</code> is
+automatically rescued with a one-shot frozen 1-D profile (Brent method)
+that supplies a gradient-informative starting value, then refit. Set
+<code>profileInit = TRUE</code> to warm-start every forward candidate
+this way rather than only stalled ones.</p>
+<p><strong>Unrealistic OFVs</strong>: <code>runSCM()</code> retries a
+candidate (up to <code>maxRetries</code>, default 3) when its fit
+produces an implausible OFV — using a perturbed or near-zero covariate
+init on alternate attempts — before falling back to the best attempt
+seen (or, with <code>retryFailOnExhaustion = TRUE</code>, excluding the
+candidate as failed). Stochastic estimators (SAEM) get a wider tolerance
+automatically to avoid spurious retries from Monte Carlo noise.</p>
+<p><strong>Categorical covariates</strong>: pass <code>catvarsVec</code>
+rather than pre-creating dummy columns. <code>runSCM()</code> handles
+level detection, reference-level selection, and indicator column
+creation automatically.</p>
+<hr />
+</div>
+<div id="references" class="section level2">
+<h2>References</h2>
+<p>Jonsson, E.N. &amp; Karlsson, M.O. (1998). Automated covariate model
+building within NONMEM. <em>Pharmaceutical Research</em>, 15(9),
+1463–1468.</p>
+<p>Lindbom, L., Ribbing, J., &amp; Jonsson, E.N. (2004).
+Perl-speaks-NONMEM (PsN) — a Perl module for NONMEM related programming.
+<em>Computer Methods and Programs in Biomedicine</em>, 75, 85–94.</p>
+<p>Ribbing, J. &amp; Jonsson, E.N. (2004). Power, selection bias and
+predictive performance of the population pharmacokinetic covariate
+model. <em>Journal of Pharmacokinetics and Pharmacodynamics</em>, 31(2),
+109–134.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

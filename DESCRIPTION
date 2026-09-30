@@ -1,6 +1,6 @@
 Package: nlmixr2scm
 Title: Stepwise Covariate Modeling for 'nlmixr2' Models
-Version: 0.4
+Version: 0.4.1
 Authors@R: c(
     person("Justin", "Wilkins", email = "justin.wilkins@occams.com", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7099-9396")),
@@ -40,7 +40,7 @@ Config/testthat/edition: 3
 Encoding: UTF-8
 Config/roxygen2/version: 8.1.0
 NeedsCompilation: no
-Packaged: 2026-09-14 09:38:51 UTC; justin
+Packaged: 2026-09-29 13:25:46 UTC; justin
 Author: Justin Wilkins [aut, cre, cph] (ORCID:
     <https://orcid.org/0000-0002-7099-9396>),
   Matthew Fidler [aut] (ORCID: <https://orcid.org/0000-0001-8538-6691>),
@@ -51,4 +51,4 @@ Author: Justin Wilkins [aut, cre, cph] (ORCID:
   Christian Bartels [ctb]
 Maintainer: Justin Wilkins <justin.wilkins@occams.com>
 Repository: CRAN
-Date/Publication: 2026-09-24 13:30:14 UTC
+Date/Publication: 2026-09-30 18:50:08 UTC

@@ -187,10 +187,22 @@
 #'   may now abort where it previously ran silently oversubscribed; set
 #'   \code{rxThreads} explicitly (e.g. \code{rxThreads = 1}) to restore the
 #'   prior behavior.
+#' @param retryOnUnderflow logical; when \code{TRUE} (default), a forward
+#'   candidate whose p-value underflows to (effectively) zero is treated as an
+#'   unrealistic OFV and retried.  For \code{df = 1} this happens whenever
+#'   the OFV drops by more than about 70, so genuinely strong covariate
+#'   effects are also retried.  Set to \code{FALSE} to skip this criterion
+#'   and save the extra fits; the OFV-increase and \code{maxDeltaOFV}
+#'   criteria still apply.
 #'
-#' @return A list with elements \code{summaryTable} (combined forward and
-#'   backward results), \code{resFwd} (list of final fit and step table from
-#'   forward search), and \code{resBck} (same for backward search).
+#' @return An object of class \code{"nlmixr2scm"}: a list with elements
+#'   \code{summaryTable} (combined forward and backward results),
+#'   \code{resFwd} (list of final fit and step table from forward search),
+#'   \code{resBck} (same for backward search), \code{baseFit} (the base
+#'   model fit), \code{options} (the settings used for the search) and
+#'   \code{outputDir} (where models and report files were saved, or
+#'   \code{NULL} when \code{saveModels = FALSE}).  Use \code{summary()} for
+#'   a human-readable report; see \code{\link{summary.nlmixr2scm}}.
 #'
 #' @export
 #' @author Vipul Mann, Matthew Fidler, Vishal Sarsani, Justin Wilkins
@@ -236,6 +248,8 @@
 #'   workers = 1L,
 #'   rxThreads = 2L
 #' )
+#' res                # short overview
+#' summary(res)       # options, model comparison, step tables, files
 #' res$summaryTable
 #' }
 runSCM <- function(
@@ -271,7 +285,8 @@ runSCM <- function(
   retrySmallInit = 0.01,
   retryOFVTolerance = NULL,
   retryFailOnExhaustion = FALSE,
-  rxThreads = NULL
+  rxThreads = NULL,
+  retryOnUnderflow = TRUE
 ) {
   if (!is.numeric(stats::AIC(fit))) {
     cli::cli_alert_danger(
@@ -505,7 +520,35 @@ runSCM <- function(
   reportDir <- if (saveModels) outputDir else NULL
 
   effective_rx_threads <- nlmixr2utils::resolveRxThreads(workers, rxThreads)
-  nlmixr2utils::.withWorkerPlan(workers, rxThreads = effective_rx_threads, {
+
+  # Settings that shaped the search, kept on the result for summary().
+  scmOptions <- list(
+    searchType = searchType,
+    pVal = pVal,
+    estimation = fit$est,
+    control = ctrl_lbl,
+    candidates = pairs,
+    includedRelations = included_pairs,
+    shapes = shapes,
+    centers = centers,
+    catCutoff = catCutoff,
+    profileInit = profileInit,
+    profileInitOnStall = profileInitOnStall,
+    stallTol = stallTol,
+    maxRetries = maxRetries,
+    maxDeltaOFV = maxDeltaOFV,
+    retryPerturbSD = retryPerturbSD,
+    retrySmallInit = retrySmallInit,
+    retryOFVTolerance = .resolveOFVTolerance(fit, retryOFVTolerance),
+    retryFailOnExhaustion = retryFailOnExhaustion,
+    retryOnUnderflow = retryOnUnderflow,
+    workers = workers,
+    rxThreads = effective_rx_threads,
+    saveModels = saveModels,
+    restart = restart
+  )
+
+  res <- nlmixr2utils::.withWorkerPlan(workers, rxThreads = effective_rx_threads, {
     # nolint: object_usage_linter.
     if (searchType == "scm") {
       resFwd <- forwardSearch(
@@ -528,7 +571,8 @@ runSCM <- function(
         retrySmallInit = retrySmallInit,
         retryOFVTolerance = retryOFVTolerance,
         retryFailOnExhaustion = retryFailOnExhaustion,
-        rxThreads = effective_rx_threads
+        rxThreads = effective_rx_threads,
+        retryOnUnderflow = retryOnUnderflow
       )
       resBck <- backwardSearch(
         pairs,
@@ -588,7 +632,8 @@ runSCM <- function(
         retrySmallInit = retrySmallInit,
         retryOFVTolerance = retryOFVTolerance,
         retryFailOnExhaustion = retryFailOnExhaustion,
-        rxThreads = effective_rx_threads
+        rxThreads = effective_rx_threads,
+        retryOnUnderflow = retryOnUnderflow
       )
       data <- NULL # release temporary SCM dataset
       .printFinalSCMSummary(
@@ -640,6 +685,11 @@ runSCM <- function(
       list(summaryTable = resBck[[2]], resFwd = NULL, resBck = resBck)
     }
   })
+  res$baseFit <- fit
+  res$options <- scmOptions
+  res["outputDir"] <- list(reportDir) # keeps the element when NULL
+  class(res) <- c("nlmixr2scm", "list")
+  res
 }
 
 # -- Helpers -------------------------------------------------------------------
@@ -1869,12 +1919,14 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
 #' @param pchisqr          chi-squared p-value for the improvement
 #' @param maxDeltaOFV      user-specified ceiling on plausible absolute OFV change
 #' @param effective_tolerance margin added to ref_objf before criterion 1 fires
+#' @param retryOnUnderflow whether criterion 2 (p-value underflow) applies
 #' @return logical scalar
 #' @noRd
 .isUnrealisticOFV <- function(x_objf, ref_objf, dObjf, pchisqr,
-                               maxDeltaOFV, effective_tolerance) {
+                               maxDeltaOFV, effective_tolerance,
+                               retryOnUnderflow = TRUE) {
   x_objf > ref_objf + effective_tolerance ||
-    pchisqr < .Machine$double.eps ||
+    (retryOnUnderflow && pchisqr < .Machine$double.eps) ||
     abs(dObjf) > maxDeltaOFV
 }
 
@@ -1915,7 +1967,8 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
   retrySmallInit = 0.01,
   effective_tolerance = 0,
   retryFailOnExhaustion = FALSE,
-  rxThreads = NULL
+  rxThreads = NULL,
+  retryOnUnderflow = TRUE
 ) {
   raw_results <- nlmixr2utils::.plap(
     # nolint: object_usage_linter.
@@ -2137,7 +2190,8 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
         }
 
         # Selection rule: candidate wins on the first attempt (best is NULL)
-        # or when its dObjf strictly exceeds the incumbent; ties keep the
+        # or when its dObjf (candidate - parent OFV) is strictly below the
+        # incumbent's, i.e. it reached a lower OFV; ties keep the
         # incumbent.  Without this tracker, the exhaustion branch silently
         # kept whichever attempt happened to be last -- under perturbed-init
         # retries that was the best only by coincidence.  The corresponding
@@ -2147,12 +2201,13 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
           attempt_num = attempt + 1L
         )
         if (is.null(best_attempt) ||
-            .cand_attempt$dObjf > best_attempt$dObjf) {
+            .cand_attempt$dObjf < best_attempt$dObjf) {
           best_attempt <- .cand_attempt
         }
 
         if (!.isUnrealisticOFV(
-          x$objf, fit$objf, dObjf, pchisqr, maxDeltaOFV, effective_tolerance
+          x$objf, fit$objf, dObjf, pchisqr, maxDeltaOFV, effective_tolerance,
+          retryOnUnderflow
         )) {
           loop_result <- list(x = x, dObjf = dObjf, dof = dof, pchisqr = pchisqr)
           break
@@ -2165,7 +2220,7 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
             if (effective_tolerance > 0) paste0(" + ", effective_tolerance) else "",
             ")"
           )
-        } else if (pchisqr < .Machine$double.eps) {
+        } else if (retryOnUnderflow && pchisqr < .Machine$double.eps) {
           paste0("p-value underflow (dOFV = ", round(dObjf, 3), ")")
         } else {
           paste0("|dOFV| (", round(abs(dObjf), 3), ") exceeds maxDeltaOFV (", maxDeltaOFV, ")")
@@ -2219,17 +2274,18 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
       # -- Profile-on-stall rescue (forward path only) ----------------------
       # Independent of the retry budget: runs AFTER the retry loop so it fires
       # even when maxRetries = 0 (the fast benchmark setting).  A forward
-      # candidate whose accepted fit still stalled -- dObjf <= stallTol, i.e.
-      # the nested model is no better than its parent, which is impossible at a
+      # candidate whose accepted fit still stalled -- OFV improvement
+      # (-dObjf) <= stallTol, i.e. the nested model is no better than its
+      # parent, which is impossible at a
       # true optimum -- means the outer optimiser never moved the covariate off
       # its init.  We run ONE frozen 1-D .profileCovInit() (all other thetas
       # fixed, BSV fixed-but-present) to obtain a basin-correct coefficient,
       # then refit the full candidate from that init.  The rescue result is
-      # kept ONLY if it strictly improves dObjf, so it can never make a
-      # candidate worse.  Healthy candidates (dObjf > stallTol, e.g. analytic
+      # kept ONLY if it strictly lowers dObjf, so it can never make a
+      # candidate worse.  Healthy candidates (-dObjf > stallTol, e.g. analytic
       # linCmt fits) skip this entirely and pay no cost.
       if (add && isTRUE(profileInitOnStall) &&
-          is.finite(dObjf) && dObjf <= stallTol) {
+          is.finite(dObjf) && -dObjf <= stallTol) {
         prof_val <- tryCatch(
           .profileCovInit(
             base_ui   = base_ui,
@@ -2267,12 +2323,12 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
           )
           if (!is.null(x_p) && !isTRUE(x_p$.failed) &&
               !is.null(x_p$objf) && is.finite(x_p$objf)) {
-            dObjf_p <- fit$objf - x_p$objf
-            if (is.finite(dObjf_p) && dObjf_p > dObjf) {
+            dObjf_p <- x_p$objf - fit$objf
+            if (is.finite(dObjf_p) && dObjf_p < dObjf) {
               dof_p <- length(x_p$finalUiEnv$ini$est) -
                 length(fit$finalUiEnv$ini$est)
-              pchisqr_p <- if (dObjf_p > 0) {
-                1 - stats::pchisq(dObjf_p, df = dof_p)
+              pchisqr_p <- if (dObjf_p < 0) {
+                1 - stats::pchisq(-dObjf_p, df = dof_p)
               } else {
                 1
               }
@@ -2401,7 +2457,8 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
 #' Winner = most significant candidate (smallest p-value). For \code{df = 1}
 #' any \code{dOFV >= ~70.5} makes \code{1 - pchisq()} underflow to exactly 0,
 #' so several strong candidates tie at \code{pchisqr == 0}. Such ties are
-#' broken by the LARGEST \code{deltObjf} (biggest OFV drop) rather than by row
+#' broken by the most negative \code{deltObjf} (candidate minus reference OFV,
+#' i.e. the biggest OFV drop) rather than by row
 #' order, which would otherwise pick the first candidate alphabetically.
 #'
 #' @param resTable candidate results table with \code{pchisqr} and
@@ -2409,7 +2466,7 @@ buildPairs <- function(varsVec = NULL, covarsVec = NULL, pairsVec = NULL) {
 #' @return integer row index of the winning candidate
 #' @noRd
 .pickForwardWinner <- function(resTable) {
-  order(resTable$pchisqr, -resTable$deltObjf)[1]
+  order(resTable$pchisqr, resTable$deltObjf)[1]
 }
 
 #' Pick the backward-search candidate to drop
@@ -2451,7 +2508,8 @@ forwardSearch <- function(
   retrySmallInit = 0.01,
   retryOFVTolerance = NULL,
   retryFailOnExhaustion = FALSE,
-  rxThreads = NULL
+  rxThreads = NULL,
+  retryOnUnderflow = TRUE
 ) {
   if (!inherits(fit, "nlmixr2FitCore")) {
     stop("'fit' needs to be a nlmixr2 fit")
@@ -2559,7 +2617,8 @@ forwardSearch <- function(
       retrySmallInit = retrySmallInit,
       effective_tolerance = effective_tolerance,
       retryFailOnExhaustion = retryFailOnExhaustion,
-      rxThreads = rxThreads
+      rxThreads = rxThreads,
+      retryOnUnderflow = retryOnUnderflow
     )
     if (length(results) == 0) {
       break
@@ -2568,7 +2627,7 @@ forwardSearch <- function(
     resTable <- do.call(rbind, lapply(results, `[[`, "stats"))
     # Winner = most significant candidate (smallest p-value). Ties at
     # pchisqr == 0 (p-value underflow for strong candidates) are broken by the
-    # largest deltObjf; see .pickForwardWinner().
+    # most negative deltObjf (biggest OFV drop); see .pickForwardWinner().
     bestIdx <- .pickForwardWinner(resTable)
     bestRow <- resTable[bestIdx, , drop = FALSE]
 
